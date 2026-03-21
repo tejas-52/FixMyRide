@@ -3,6 +3,7 @@ import { CheckCircle2 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { MapBackground } from '../components/MapBackground';
 import { useAppStore } from '../store/useAppStore';
+import { db, updateDoc, doc, serverTimestamp } from '../firebase';
 
 export const UserFinding = () => {
   const { setAppState, setActiveRequest } = useAppStore();
@@ -13,11 +14,31 @@ export const UserFinding = () => {
     setActiveRequest(null);
   };
 
+  const simulateAccept = async () => {
+    const { activeRequest, user } = useAppStore.getState();
+    if (!activeRequest) return;
+    
+    try {
+      console.log('Simulating mechanic acceptance...');
+      await updateDoc(doc(db, 'requests', activeRequest.id), {
+        status: 'ACCEPTED',
+        mechanicUid: 'MOCK_MECH_123',
+        mechanicName: 'Rahul Sharma',
+        mechanicPhoto: 'https://picsum.photos/seed/mech/200',
+        mechanicRating: 4.8,
+        mechanicPhone: '+91 98765 43210',
+        updatedAt: serverTimestamp(),
+      });
+    } catch (error) {
+      console.error('Simulation failed:', error);
+    }
+  };
+
   return (
     <div className="h-full relative">
       <MapBackground location="mumbai">
-        <div className="absolute inset-0 flex items-center justify-center z-10">
-          <div className="relative">
+        <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
+          <div className="relative pointer-events-auto">
             <motion.div 
               animate={{ scale: [1, 1.5, 1], opacity: [0.1, 0.3, 0.1] }}
               transition={{ repeat: Infinity, duration: 2 }}
@@ -26,6 +47,13 @@ export const UserFinding = () => {
             <div className="w-24 h-24 bg-primary rounded-full flex items-center justify-center shadow-2xl relative z-10">
               <div className="w-16 h-16 border-4 border-on-primary border-t-transparent rounded-full animate-spin" />
             </div>
+            
+            <button 
+              onClick={simulateAccept}
+              className="absolute -bottom-32 left-1/2 -translate-x-1/2 bg-surface-container-low border border-outline-variant/20 px-6 py-3 rounded-full font-bold text-xs hover:bg-surface-container-high transition-all active:scale-95 shadow-lg whitespace-nowrap"
+            >
+              SIMULATE MECHANIC ACCEPTANCE
+            </button>
           </div>
         </div>
       </MapBackground>

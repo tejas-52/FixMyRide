@@ -4,6 +4,8 @@ import {
   auth, 
   db, 
   signInWithGoogle, 
+  signInEmail,
+  signUpEmail,
   logOut, 
   onSnapshot, 
   collection, 
@@ -16,8 +18,10 @@ import {
   addDoc, 
   serverTimestamp,
   onAuthStateChanged,
-  FirebaseUser
+  FirebaseUser,
+  signInAnonymously
 } from '../firebase';
+import { handleFirestoreError, OperationType } from '../services/errorService';
 
 interface AppStore {
   user: User | null;
@@ -31,10 +35,14 @@ interface AppStore {
   activities: Activity[];
   availableRequests: Request[];
   isTripStarted: boolean;
+  unsubscribes: (() => void)[];
 
   // Actions
   init: () => void;
+  cleanup: () => void;
   signIn: () => Promise<void>;
+  signInWithEmail: (email: string, pass: string) => Promise<void>;
+  signUpWithEmail: (email: string, pass: string) => Promise<void>;
   signOut: () => Promise<void>;
   setRole: (role: UserRole) => void;
   setAppState: (state: AppState) => void;
@@ -50,6 +58,7 @@ interface AppStore {
   completeRequest: (requestId: string) => Promise<void>;
   addVehicle: (vehicle: Omit<Vehicle, 'id' | 'ownerUid'>) => Promise<void>;
   resetApp: () => void;
+  enterDemoMode: () => void;
 }
 
 export const useAppStore = create<AppStore>((set, get) => ({
@@ -64,74 +73,163 @@ export const useAppStore = create<AppStore>((set, get) => ({
   activities: [],
   availableRequests: [],
   isTripStarted: false,
+  unsubscribes: [],
+
+  cleanup: () => {
+    const { unsubscribes } = get();
+    console.log(`Cleaning up ${unsubscribes.length} listeners...`);
+    unsubscribes.forEach(unsub => unsub());
+    set({ unsubscribes: [] });
+  },
 
   init: () => {
-    onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
+    const { cleanup } = get();
+    
+    const authUnsub = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
+      cleanup(); // Clean up existing listeners on auth change
+      
       if (firebaseUser) {
-        // Fetch or create user profile
-        const userDocRef = doc(db, 'users', firebaseUser.uid);
-        const userDoc = await getDoc(userDocRef);
-        
-        let userData: User;
-        if (!userDoc.exists()) {
-          userData = {
-            uid: firebaseUser.uid,
-            name: firebaseUser.displayName || 'Anonymous',
-            email: firebaseUser.email || '',
-            photoURL: firebaseUser.photoURL || '',
-            role: 'USER',
-            createdAt: serverTimestamp(),
-          };
-          await setDoc(userDocRef, userData);
-        } else {
-          userData = userDoc.data() as User;
-        }
-        
-        set({ user: userData, role: userData.role, loading: false });
-
-        // Listen for user's vehicles
-        onSnapshot(query(collection(db, 'vehicles'), where('ownerUid', '==', firebaseUser.uid)), (snapshot) => {
-          const vehicles = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Vehicle));
-          set({ vehicles });
-        });
-
-        // Listen for user's activities
-        onSnapshot(query(collection(db, 'activities'), where('userUid', '==', firebaseUser.uid)), (snapshot) => {
-          const activities = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Activity));
-          set({ activities });
-        });
-
-        // Listen for active request
-        onSnapshot(query(collection(db, 'requests'), where('customerUid', '==', firebaseUser.uid), where('status', 'in', ['PENDING', 'ACCEPTED'])), (snapshot) => {
-          if (!snapshot.empty) {
-            const request = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as Request;
-            set({ activeRequest: request });
-            if (request.status === 'ACCEPTED') {
-              set({ appState: 'USER_TRACKING' });
-            } else {
-              set({ appState: 'USER_FINDING' });
-            }
+        try {
+          // Fetch or create user profile
+          const userDocRef = doc(db, 'users', firebaseUser.uid);
+          const userDoc = await getDoc(userDocRef);
+          
+          let userData: User;
+          if (!userDoc.exists()) {
+            userData = {
+              uid: firebaseUser.uid,
+              name: firebaseUser.displayName || 'Anonymous',
+              email: firebaseUser.email || '',
+              photoURL: firebaseUser.photoURL || '',
+              role: 'USER',
+              createdAt: serverTimestamp(),
+            };
+            await setDoc(userDocRef, userData);
           } else {
-            // Check if mechanic has an active request
-            onSnapshot(query(collection(db, 'requests'), where('mechanicUid', '==', firebaseUser.uid), where('status', '==', 'ACCEPTED')), (snapshot) => {
+            userData = userDoc.data() as User;
+          }
+          
+          const initialAppState = userData.role === 'MECHANIC' ? 'MECHANIC_LIST' : 'USER_HOME';
+          set({ user: userData, role: userData.role, loading: false, appState: initialAppState });
+
+          const newUnsubs: (() => void)[] = [];
+
+          // Listen for user's vehicles
+          const vehiclesUnsub = onSnapshot(
+            query(collection(db, 'vehicles'), where('ownerUid', '==', firebaseUser.uid)), 
+            (snapshot) => {
+              const vehicles = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Vehicle));
+              set({ vehicles });
+            },
+            (error) => handleFirestoreError(error, OperationType.GET, 'vehicles')
+          );
+          newUnsubs.push(vehiclesUnsub);
+
+          // Listen for user's activities
+          const activitiesUnsub = onSnapshot(
+            query(collection(db, 'activities'), where('userUid', '==', firebaseUser.uid)), 
+            (snapshot) => {
+              const activities = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Activity));
+              set({ activities });
+            },
+            (error) => handleFirestoreError(error, OperationType.GET, 'activities')
+          );
+          newUnsubs.push(activitiesUnsub);
+
+          // Listen for active request (as customer)
+          const customerRequestUnsub = onSnapshot(
+            query(collection(db, 'requests'), where('customerUid', '==', firebaseUser.uid), where('status', 'in', ['PENDING', 'ACCEPTED'])), 
+            (snapshot) => {
+              if (!snapshot.empty) {
+                const request = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as Request;
+                set({ activeRequest: request });
+                if (request.status === 'ACCEPTED') {
+                  set({ appState: 'USER_TRACKING' });
+                } else {
+                  set({ appState: 'USER_FINDING' });
+                }
+              } else {
+                // If no customer request, check if we need to clear activeRequest
+                const { activeRequest } = get();
+                if (activeRequest && activeRequest.customerUid === firebaseUser.uid) {
+                  set({ activeRequest: null });
+                }
+              }
+            },
+            (error) => handleFirestoreError(error, OperationType.GET, 'requests (customer)')
+          );
+          newUnsubs.push(customerRequestUnsub);
+
+          // Listen for active request (as mechanic)
+          const mechanicRequestUnsub = onSnapshot(
+            query(collection(db, 'requests'), where('mechanicUid', '==', firebaseUser.uid), where('status', '==', 'ACCEPTED')), 
+            (snapshot) => {
               if (!snapshot.empty) {
                 const request = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as Request;
                 set({ activeRequest: request, appState: 'MECHANIC_NAV' });
+              } else {
+                // If no mechanic request, check if we need to clear activeRequest
+                const { activeRequest } = get();
+                if (activeRequest && activeRequest.mechanicUid === firebaseUser.uid) {
+                  set({ activeRequest: null });
+                }
               }
-            });
-          }
-        });
+            },
+            (error) => handleFirestoreError(error, OperationType.GET, 'requests (mechanic)')
+          );
+          newUnsubs.push(mechanicRequestUnsub);
 
-        // Listen for all pending requests (for mechanics)
-        onSnapshot(query(collection(db, 'requests'), where('status', '==', 'PENDING')), (snapshot) => {
-          const requests = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Request));
-          set({ availableRequests: requests });
-        });
+          // Listen for all pending requests (for mechanics)
+          const pendingRequestsUnsub = onSnapshot(
+            query(collection(db, 'requests'), where('status', '==', 'PENDING')), 
+            (snapshot) => {
+              const requests = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Request));
+              set({ availableRequests: requests });
+            },
+            (error) => handleFirestoreError(error, OperationType.GET, 'requests (pending)')
+          );
+          newUnsubs.push(pendingRequestsUnsub);
 
+          set({ unsubscribes: newUnsubs });
+
+        } catch (error) {
+          console.error('Init error:', error);
+          set({ loading: false });
+        }
       } else {
-        set({ user: null, loading: false, appState: 'USER_HOME', activeRequest: null });
+        // Only set to null if not in demo mode
+        const { user } = get();
+        if (!user || user.uid !== 'DEMO_USER') {
+          set({ user: null, loading: false, appState: 'USER_HOME', activeRequest: null });
+        }
       }
     });
+
+    set(state => ({ unsubscribes: [...state.unsubscribes, authUnsub] }));
+  },
+
+  enterDemoMode: async () => {
+    try {
+      set({ loading: true });
+      await signInAnonymously(auth);
+    } catch (error: any) {
+      console.warn('Anonymous Auth disabled, falling back to Local Demo:', error.message);
+      
+      // Fallback to local mock user if Anonymous Auth is not enabled in Firebase Console
+      const demoUser: User = {
+        uid: 'LOCAL_DEMO_USER',
+        name: 'Demo User (Local)',
+        email: 'demo@example.com',
+        photoURL: 'https://picsum.photos/seed/demo/200',
+        role: 'USER',
+        createdAt: serverTimestamp(),
+      };
+      set({ user: demoUser, role: 'USER', appState: 'USER_HOME', loading: false });
+      
+      if (error.code === 'auth/admin-restricted-operation') {
+        alert('Demo Mode is running locally. To enable real-time database features in Demo Mode, please enable "Anonymous Authentication" in your Firebase Console.');
+      }
+    }
   },
 
   signIn: async () => {
@@ -139,6 +237,24 @@ export const useAppStore = create<AppStore>((set, get) => ({
       await signInWithGoogle();
     } catch (error) {
       console.error('Sign in error:', error);
+    }
+  },
+
+  signInWithEmail: async (email, pass) => {
+    try {
+      await signInEmail(email, pass);
+    } catch (error) {
+      console.error('Email sign in error:', error);
+      throw error;
+    }
+  },
+
+  signUpWithEmail: async (email, pass) => {
+    try {
+      await signUpEmail(email, pass);
+    } catch (error) {
+      console.error('Email sign up error:', error);
+      throw error;
     }
   },
 
@@ -177,15 +293,26 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
   createRequest: async (requestData) => {
     const { user } = get();
-    if (!user) return;
+    if (!user) {
+      console.error('No user found when creating request');
+      return;
+    }
     
-    await addDoc(collection(db, 'requests'), {
-      ...requestData,
-      customerUid: user.uid,
-      status: 'PENDING',
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    });
+    try {
+      console.log('Creating request for user:', user.uid);
+      await addDoc(collection(db, 'requests'), {
+        ...requestData,
+        customerUid: user.uid,
+        status: 'PENDING',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      console.log('Request created successfully');
+      set({ appState: 'USER_FINDING' }); // Optimistic update
+    } catch (error) {
+      console.error('Error creating request:', error);
+      throw error;
+    }
   },
 
   acceptRequest: async (requestId) => {
