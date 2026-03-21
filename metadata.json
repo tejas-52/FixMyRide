@@ -1,0 +1,5 @@
+{
+  "name": "FixMyRide",
+  "description": "Professional roadside assistance at your fingertips.",
+  "requestFramePermissions": ["geolocation"]
+}

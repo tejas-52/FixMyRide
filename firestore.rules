@@ -1,0 +1,85 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
+    
+    function isDocOwner(field) {
+      return isAuthenticated() && request.auth.uid == resource.data[field];
+    }
+
+    function isNewDocOwner(field) {
+      return isAuthenticated() && request.auth.uid == request.resource.data[field];
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'name', 'email', 'role']) &&
+             data.uid is string &&
+             data.name is string && data.name.size() > 0 &&
+             data.email is string &&
+             data.role in ['USER', 'MECHANIC'];
+    }
+
+    function isValidRequest(data) {
+      return data.keys().hasAll(['customerUid', 'status', 'location', 'issueType', 'vehicle']) &&
+             data.customerUid is string &&
+             data.status in ['PENDING', 'ACCEPTED', 'COMPLETED', 'CANCELLED'] &&
+             data.location is string &&
+             data.issueType is string &&
+             data.vehicle is string;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "tejasjagdale52@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{uid} {
+      allow read: if isAuthenticated();
+      allow create: if isOwner(uid) && isValidUser(request.resource.data);
+      allow update: if (isOwner(uid) || isAdmin()) && isValidUser(request.resource.data);
+    }
+
+    match /vehicles/{vehicleId} {
+      allow read: if isAuthenticated() && (isDocOwner('ownerUid') || isAdmin());
+      allow create: if isNewDocOwner('ownerUid');
+      allow update: if isAuthenticated() && (isDocOwner('ownerUid') || isAdmin());
+      allow delete: if isAuthenticated() && (isDocOwner('ownerUid') || isAdmin());
+    }
+
+    match /activities/{activityId} {
+      allow read: if isAuthenticated() && (isDocOwner('userUid') || isAdmin());
+      allow create: if isNewDocOwner('userUid');
+      allow update: if isAuthenticated() && (isDocOwner('userUid') || isAdmin());
+    }
+
+    match /requests/{requestId} {
+      allow read: if isAuthenticated();
+      allow create: if isNewDocOwner('customerUid') && isValidRequest(request.resource.data);
+      allow update: if isAuthenticated() && (
+        isDocOwner('customerUid') || 
+        isDocOwner('mechanicUid') || 
+        (resource.data.status == 'PENDING' && request.resource.data.status == 'ACCEPTED' && request.resource.data.mechanicUid == request.auth.uid) ||
+        isAdmin()
+      ) && isValidRequest(request.resource.data);
+    }
+
+    match /test/{docId} {
+      allow read: if true;
+    }
+  }
+}
