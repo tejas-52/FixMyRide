@@ -21,11 +21,15 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == request.resource.data[field];
     }
 
+    function isRecent(time) {
+      return time > request.time - duration.value(1, 'm') &&
+             time < request.time + duration.value(1, 'm');
+    }
+
     function isValidUser(data) {
-      return data.keys().hasAll(['uid', 'name', 'email', 'role']) &&
+      return data.keys().hasAll(['uid', 'name', 'role']) &&
              data.uid is string &&
              data.name is string && data.name.size() > 0 &&
-             data.email is string &&
              data.role in ['USER', 'MECHANIC'];
     }
 
@@ -35,13 +39,17 @@ service cloud.firestore {
              data.status in ['PENDING', 'ACCEPTED', 'COMPLETED', 'CANCELLED'] &&
              data.location is string &&
              data.issueType is string &&
-             data.vehicle is string;
+             data.vehicle is string &&
+             (!('createdAt' in data) || data.createdAt is timestamp || data.createdAt == request.time) &&
+             (!('updatedAt' in data) || data.updatedAt is timestamp || data.updatedAt == request.time);
     }
 
     function isAdmin() {
       return isAuthenticated() &&
-        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
-          (request.auth.token.email == "tejasjagdale52@gmail.com" && request.auth.token.email_verified == true));
+        (
+          (request.auth.token.email == "tejasjagdale52@gmail.com" && request.auth.token.email_verified == true) ||
+          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+        );
     }
 
     // ===============================================================
@@ -55,25 +63,40 @@ service cloud.firestore {
     }
 
     match /vehicles/{vehicleId} {
-      allow read: if isAuthenticated() && (isDocOwner('ownerUid') || isAdmin());
-      allow create: if isNewDocOwner('ownerUid');
-      allow update: if isAuthenticated() && (isDocOwner('ownerUid') || isAdmin());
-      allow delete: if isAuthenticated() && (isDocOwner('ownerUid') || isAdmin());
+      allow read: if isAuthenticated() && (
+        (exists(resource.data) && resource.data.ownerUid == request.auth.uid) || 
+        isAdmin()
+      );
+      allow create: if isAuthenticated() && request.resource.data.ownerUid == request.auth.uid;
+      allow update: if isAuthenticated() && (
+        (exists(resource.data) && resource.data.ownerUid == request.auth.uid) || 
+        isAdmin()
+      );
+      allow delete: if isAuthenticated() && (
+        (exists(resource.data) && resource.data.ownerUid == request.auth.uid) || 
+        isAdmin()
+      );
     }
 
     match /activities/{activityId} {
-      allow read: if isAuthenticated() && (isDocOwner('userUid') || isAdmin());
-      allow create: if isNewDocOwner('userUid');
-      allow update: if isAuthenticated() && (isDocOwner('userUid') || isAdmin());
+      allow read: if isAuthenticated() && (
+        (exists(resource.data) && resource.data.userUid == request.auth.uid) || 
+        isAdmin()
+      );
+      allow create: if isAuthenticated() && request.resource.data.userUid == request.auth.uid;
+      allow update: if isAuthenticated() && (
+        (exists(resource.data) && resource.data.userUid == request.auth.uid) || 
+        isAdmin()
+      );
     }
 
     match /requests/{requestId} {
       allow read: if isAuthenticated();
-      allow create: if isNewDocOwner('customerUid') && isValidRequest(request.resource.data);
+      allow create: if isAuthenticated() && request.resource.data.customerUid == request.auth.uid && isValidRequest(request.resource.data);
       allow update: if isAuthenticated() && (
-        isDocOwner('customerUid') || 
-        isDocOwner('mechanicUid') || 
-        (resource.data.status == 'PENDING' && request.resource.data.status == 'ACCEPTED' && request.resource.data.mechanicUid == request.auth.uid) ||
+        (exists(resource.data) && resource.data.customerUid == request.auth.uid) || 
+        (exists(resource.data) && resource.data.mechanicUid == request.auth.uid) || 
+        (exists(resource.data) && resource.data.status == 'PENDING' && request.resource.data.status == 'ACCEPTED' && request.resource.data.mechanicUid == request.auth.uid) ||
         isAdmin()
       ) && isValidRequest(request.resource.data);
     }

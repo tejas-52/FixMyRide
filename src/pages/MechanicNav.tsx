@@ -21,23 +21,28 @@ export const MechanicNav = () => {
 
   return (
     <div className="h-full relative">
-      <MapBackground location="seattle">
-        <Polyline 
-          positions={[movingPos, userPos]} 
-          color="#006a33" 
-          weight={4} 
-          dashArray="10, 10" 
-          opacity={0.6}
-        />
-        <Marker 
-          position={userPos} 
-          icon={createCustomIcon(<CircleDot className="text-white" size={20} />, 'bg-tertiary')} 
-        />
-        <Marker 
-          position={movingPos} 
-          icon={createCustomIcon(<Car className="text-white" size={20} />, 'bg-primary')} 
-        />
-      </MapBackground>
+      <MapBackground 
+        location="seattle"
+        mapContent={
+          <>
+            <Polyline 
+              positions={[movingPos, userPos]} 
+              color="#006a33" 
+              weight={4} 
+              dashArray="10, 10" 
+              opacity={0.6}
+            />
+            <Marker 
+              position={userPos} 
+              icon={createCustomIcon(<CircleDot className="text-white" size={20} />, 'bg-tertiary')} 
+            />
+            <Marker 
+              position={movingPos} 
+              icon={createCustomIcon(<Car className="text-white" size={20} />, 'bg-primary')} 
+            />
+          </>
+        }
+      />
 
       <header className="fixed top-4 left-4 right-4 z-50">
         <div className="glass rounded-2xl px-6 py-5 flex items-center justify-between shadow-2xl border border-white/20">

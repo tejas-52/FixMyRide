@@ -17,28 +17,105 @@ import { MechanicNav } from './pages/MechanicNav';
 import { MechanicGarage } from './pages/MechanicGarage';
 
 const LoginScreen = () => {
-  const { signIn } = useAppStore();
+  const { signIn, signInWithEmail, signUpWithEmail, enterDemoMode } = useAppStore();
+  const [isSignUp, setIsSignUp] = React.useState(false);
+  const [email, setEmail] = React.useState('');
+  const [password, setPassword] = React.useState('');
+  const [error, setError] = React.useState('');
+  const [loading, setLoading] = React.useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      if (isSignUp) {
+        await signUpWithEmail(email, password);
+      } else {
+        await signInWithEmail(email, password);
+      }
+    } catch (err: any) {
+      setError(err.message || 'Authentication failed');
+    } finally {
+      setLoading(false);
+    }
+  };
   
   return (
     <div className="min-h-screen bg-surface flex flex-col items-center justify-center p-8 text-center">
       <motion.div 
         initial={{ scale: 0.8, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        className="w-24 h-24 bg-primary rounded-[2.5rem] flex items-center justify-center text-on-primary mb-8 shadow-2xl shadow-primary/20"
+        className="w-20 h-20 bg-primary rounded-[2rem] flex items-center justify-center text-on-primary mb-6 shadow-2xl shadow-primary/20"
       >
-        <Car size={48} />
+        <Car size={40} />
       </motion.div>
-      <h1 className="text-4xl font-black tracking-tighter mb-4">FixMyRide</h1>
-      <p className="text-on-surface-variant font-medium mb-12 max-w-xs">
-        Professional roadside assistance at your fingertips. Anywhere, anytime.
+      <h1 className="text-3xl font-black tracking-tighter mb-2">FixMyRide</h1>
+      <p className="text-on-surface-variant font-medium mb-8 max-w-xs text-sm">
+        Professional roadside assistance at your fingertips.
       </p>
-      <button 
-        onClick={signIn}
-        className="w-full max-w-xs bg-surface-container-low border border-outline-variant/20 p-5 rounded-3xl flex items-center justify-center gap-4 font-bold text-lg hover:bg-surface-container-high transition-all active:scale-95 shadow-sm"
-      >
-        <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="w-6 h-6" />
-        Continue with Google
-      </button>
+
+      <form onSubmit={handleSubmit} className="w-full max-w-xs space-y-4 mb-6">
+        <div className="space-y-2">
+          <input 
+            type="email" 
+            placeholder="Email address"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="w-full bg-surface-container-low border border-outline-variant/20 p-4 rounded-2xl font-medium focus:outline-none focus:border-primary transition-all"
+            required
+          />
+          <input 
+            type="password" 
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="w-full bg-surface-container-low border border-outline-variant/20 p-4 rounded-2xl font-medium focus:outline-none focus:border-primary transition-all"
+            required
+          />
+        </div>
+
+        {error && <p className="text-error text-xs font-bold">{error}</p>}
+
+        <button 
+          disabled={loading}
+          type="submit"
+          className="w-full bg-linear-to-br from-primary to-primary/80 text-on-primary p-4 rounded-2xl font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-all active:scale-95 disabled:opacity-50 shadow-lg shadow-primary/20"
+        >
+          {loading ? 'Processing...' : (isSignUp ? 'Create Account' : 'Sign In')}
+        </button>
+
+        <button 
+          type="button"
+          onClick={() => setIsSignUp(!isSignUp)}
+          className="text-sm font-bold text-primary hover:underline"
+        >
+          {isSignUp ? 'Already have an account? Sign In' : "Don't have an account? Sign Up"}
+        </button>
+      </form>
+
+      <div className="w-full max-w-xs flex items-center gap-4 mb-6">
+        <div className="h-px bg-outline-variant/20 flex-1" />
+        <span className="text-xs font-bold text-on-surface-variant">OR</span>
+        <div className="h-px bg-outline-variant/20 flex-1" />
+      </div>
+
+      <div className="w-full max-w-xs space-y-3">
+        <button 
+          onClick={signIn}
+          className="w-full bg-surface-container-low border border-outline-variant/20 p-4 rounded-2xl flex items-center justify-center gap-4 font-bold hover:bg-surface-container-high transition-all active:scale-95 shadow-sm"
+        >
+          <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" className="w-5 h-5" />
+          Continue with Google
+        </button>
+
+        <button 
+          onClick={enterDemoMode}
+          className="w-full bg-surface-container-lowest border-2 border-primary/20 text-primary p-4 rounded-2xl font-bold hover:bg-primary/5 transition-all active:scale-95"
+        >
+          Try Demo Mode
+        </button>
+      </div>
     </div>
   );
 };
@@ -50,11 +127,12 @@ const LoadingScreen = () => (
 );
 
 const App = () => {
-  const { appState, user, loading, init } = useAppStore();
+  const { appState, user, loading, init, cleanup } = useAppStore();
 
   useEffect(() => {
     init();
-  }, [init]);
+    return () => cleanup();
+  }, [init, cleanup]);
 
   if (loading) return <LoadingScreen />;
   if (!user) return <LoginScreen />;

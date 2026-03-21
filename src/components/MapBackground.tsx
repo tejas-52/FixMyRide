@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { MapContainer, TileLayer, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, useMap, useMapEvents } from 'react-leaflet';
 import { Compass, Layers } from 'lucide-react';
 
 const MapUpdater = ({ center }: { center: [number, number] }) => {
@@ -10,7 +10,28 @@ const MapUpdater = ({ center }: { center: [number, number] }) => {
   return null;
 };
 
-export const MapBackground = ({ children, location = "mumbai" }: { children?: React.ReactNode, location?: string }) => {
+const MapEvents = ({ onClick }: { onClick?: (latlng: [number, number]) => void }) => {
+  useMapEvents({
+    click: (e) => {
+      if (onClick) {
+        onClick([e.latlng.lat, e.latlng.lng]);
+      }
+    },
+  });
+  return null;
+};
+
+export const MapBackground = ({ 
+  children, 
+  mapContent, 
+  location = "mumbai",
+  onMapClick
+}: { 
+  children?: React.ReactNode, 
+  mapContent?: React.ReactNode, 
+  location?: string,
+  onMapClick?: (latlng: [number, number]) => void
+}) => {
   const coords: Record<string, [number, number]> = {
     mumbai: [19.0760, 72.8777],
     london: [51.5074, -0.1278],
@@ -24,7 +45,7 @@ export const MapBackground = ({ children, location = "mumbai" }: { children?: Re
       <MapContainer 
         center={center} 
         zoom={13} 
-        scrollWheelZoom={false}
+        scrollWheelZoom={true}
         zoomControl={false}
         className="h-full w-full grayscale opacity-60"
       >
@@ -33,17 +54,23 @@ export const MapBackground = ({ children, location = "mumbai" }: { children?: Re
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
         <MapUpdater center={center} />
-        {children}
+        <MapEvents onClick={onMapClick} />
+        {mapContent}
       </MapContainer>
+      
+      {/* Children (HTML Overlays) */}
+      <div className="absolute inset-0 pointer-events-none z-20">
+        {children}
+      </div>
       
       <div className="absolute inset-0 bg-radial-gradient from-transparent to-surface pointer-events-none z-10" />
       
       {/* Mock Map UI Elements */}
-      <div className="absolute top-24 right-6 z-20 flex flex-col gap-3">
-        <button className="w-12 h-12 bg-surface-container-lowest rounded-xl shadow-md flex items-center justify-center text-primary active:scale-95 transition-transform">
+      <div className="absolute top-24 right-6 z-30 flex flex-col gap-3">
+        <button className="w-12 h-12 bg-surface-container-lowest rounded-xl shadow-md flex items-center justify-center text-primary active:scale-95 transition-transform pointer-events-auto">
           <Compass size={24} />
         </button>
-        <button className="w-12 h-12 bg-surface-container-lowest rounded-xl shadow-md flex items-center justify-center text-on-surface-variant active:scale-95 transition-transform">
+        <button className="w-12 h-12 bg-surface-container-lowest rounded-xl shadow-md flex items-center justify-center text-on-surface-variant active:scale-95 transition-transform pointer-events-auto">
           <Layers size={24} />
         </button>
       </div>

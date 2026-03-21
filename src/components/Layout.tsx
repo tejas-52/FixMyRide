@@ -15,21 +15,25 @@ export const TopBar = () => {
         <h1 className="text-2xl font-black text-on-surface tracking-tighter font-headline">FixMyRide</h1>
       </div>
       <div className="flex items-center gap-4">
-        {role === 'MECHANIC' && (
-          <div className="flex items-center bg-surface-container-low rounded-full px-3 py-1 gap-2">
-            <div className="w-2 h-2 bg-primary rounded-full animate-pulse"></div>
-            <span className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Online</span>
-          </div>
-        )}
+        <div className="hidden sm:flex items-center bg-primary/10 border border-primary/20 px-3 py-1 rounded-full gap-2">
+          <div className="w-1.5 h-1.5 bg-primary rounded-full animate-pulse" />
+          <span className="text-[10px] font-bold uppercase tracking-widest text-primary">Demo Mode</span>
+        </div>
         <button 
           onClick={toggleRole}
-          className="w-10 h-10 rounded-full overflow-hidden border-2 border-primary/10 hover:ring-2 ring-primary/20 transition-all"
+          className="flex items-center gap-2 bg-surface-container-low border border-outline-variant/20 px-3 py-1.5 rounded-full hover:bg-surface-container-high transition-all active:scale-95"
         >
-          <img 
-            src={role === 'USER' ? "https://picsum.photos/seed/user/100" : "https://picsum.photos/seed/mech/100"} 
-            alt="Profile" 
-            className="w-full h-full object-cover"
-          />
+          <div className="w-8 h-8 rounded-full overflow-hidden border-2 border-primary/20">
+            <img 
+              src={role === 'USER' ? "https://picsum.photos/seed/user/100" : "https://picsum.photos/seed/mech/100"} 
+              alt="Profile" 
+              className="w-full h-full object-cover"
+            />
+          </div>
+          <div className="flex flex-col items-start pr-1">
+            <span className="text-[8px] font-bold uppercase text-on-surface-variant leading-none">Switch to</span>
+            <span className="text-[10px] font-black uppercase text-primary leading-none mt-0.5">{role === 'USER' ? 'Mechanic' : 'User'}</span>
+          </div>
         </button>
       </div>
     </header>
