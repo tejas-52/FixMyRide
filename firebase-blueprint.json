@@ -1,0 +1,82 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "Stores user and mechanic profile information.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "name": { "type": "string", "description": "Display name" },
+        "email": { "type": "string", "format": "email", "description": "Email address" },
+        "photoURL": { "type": "string", "format": "uri", "description": "Profile photo URL" },
+        "role": { "type": "string", "enum": ["USER", "MECHANIC"], "description": "User role" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Account creation timestamp" }
+      },
+      "required": ["uid", "name", "email", "role"]
+    },
+    "Request": {
+      "title": "Service Request",
+      "description": "Stores roadside assistance requests.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Request ID" },
+        "customerUid": { "type": "string", "description": "UID of the customer" },
+        "customerName": { "type": "string", "description": "Name of the customer" },
+        "customerPhoto": { "type": "string", "description": "Photo of the customer" },
+        "mechanicUid": { "type": "string", "description": "UID of the assigned mechanic (null if pending)" },
+        "status": { "type": "string", "enum": ["PENDING", "ACCEPTED", "COMPLETED", "CANCELLED"], "description": "Request status" },
+        "location": { "type": "string", "description": "Breakdown location" },
+        "issueType": { "type": "string", "description": "Type of service needed" },
+        "vehicle": { "type": "string", "description": "Vehicle details" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Last update timestamp" }
+      },
+      "required": ["customerUid", "status", "location", "issueType", "vehicle"]
+    },
+    "Vehicle": {
+      "title": "User Vehicle",
+      "description": "Stores user vehicle information.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Vehicle ID" },
+        "ownerUid": { "type": "string", "description": "UID of the owner" },
+        "name": { "type": "string", "description": "Vehicle name" },
+        "type": { "type": "string", "description": "Vehicle type" },
+        "plate": { "type": "string", "description": "License plate number" }
+      },
+      "required": ["ownerUid", "name", "type", "plate"]
+    },
+    "Activity": {
+      "title": "Service Activity",
+      "description": "Stores completed service history.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Activity ID" },
+        "userUid": { "type": "string", "description": "UID of the user/mechanic" },
+        "date": { "type": "string", "description": "Service date" },
+        "service": { "type": "string", "description": "Service name" },
+        "cost": { "type": "string", "description": "Service cost" },
+        "status": { "type": "string", "description": "Completion status" }
+      },
+      "required": ["userUid", "service", "cost", "status"]
+    }
+  },
+  "firestore": {
+    "/users/{uid}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/requests/{requestId}": {
+      "schema": "Request",
+      "description": "Service requests"
+    },
+    "/vehicles/{vehicleId}": {
+      "schema": "Vehicle",
+      "description": "User vehicles"
+    },
+    "/activities/{activityId}": {
+      "schema": "Activity",
+      "description": "Service history"
+    }
+  }
+}
